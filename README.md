@@ -28,7 +28,7 @@ Everything else (including ffmpeg) is installed automatically into a local virtu
 ## Quick start
 
 ```bash
-git clone https://github.com/<you>/minute-agent.git
+git clone https://github.com/angelusgi/minute-agent.git
 cd minute-agent
 ```
 
