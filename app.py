@@ -278,7 +278,9 @@ Struttura obbligatoria (markdown):
 
 **Data:** {date}
 **Durata:** {duration}
-**Partecipanti:** (deducili dalla trascrizione; se non identificabili scrivi "da completare")
+
+## Partecipanti
+(OBBLIGATORIO: individua sempre gli interlocutori dalla trascrizione - nomi propri pronunciati, presentazioni, riferimenti diretti, ruoli e azienda se deducibili. Elencali con eventuale ruolo. Se qualcuno non e' identificabile, indicalo come "Interlocutore non identificato" e aggiungi "da completare")
 
 ## Sintesi esecutiva
 (3-5 frasi)
@@ -299,18 +301,23 @@ Struttura obbligatoria (markdown):
 ## Prossimi passi
 (elenco)
 
-Regole: non inventare fatti non presenti nella trascrizione; usa "da completare" dove mancano informazioni; mantieni i termini tecnici originali (Azure, Terraform, policy, ecc.).
-
+Regole: non inventare fatti non presenti nella trascrizione; usa "da completare" dove mancano informazioni; mantieni i termini tecnici originali (Azure, Terraform, policy, ecc.); attribuisci decisioni e azioni alle persone quando l'interlocutore e' identificabile dal contesto.
+{custom}
 TRASCRIZIONE:
 {transcript}
 """
 
 
 def generate_minutes(transcript: str, title: str, date: str, duration: str,
-                     ollama_model: str, job_id: str) -> tuple:
+                     ollama_model: str, job_id: str, custom_prompt: str = "") -> tuple:
     """Ritorna (markdown, warning|None)."""
+    custom = ""
+    if custom_prompt.strip():
+        custom = ("\nISTRUZIONI AGGIUNTIVE DELL'UTENTE (hanno priorita' sulle regole "
+                  f"precedenti, tranne il divieto di inventare fatti):\n{custom_prompt.strip()}\n")
     prompt = MINUTE_PROMPT.format(
-        title=title, date=date, duration=duration, transcript=transcript[:60000]
+        title=title, date=date, duration=duration, custom=custom,
+        transcript=transcript[:60000]
     )
     try:
         append_log(job_id, f"Genero la minuta con Ollama ({ollama_model}) - "
@@ -339,7 +346,7 @@ def generate_minutes(transcript: str, title: str, date: str, duration: str,
         )
         append_log(job_id, warning)
         md = MINUTE_PROMPT.format(
-            title=title, date=date, duration=duration, transcript=""
+            title=title, date=date, duration=duration, custom="", transcript=""
         ).split("TRASCRIZIONE:")[0].split("Regole:")[0]
         md = md.replace("Sei un consulente IT senior.", "").strip()
         md = md.split("Struttura obbligatoria (markdown):", 1)[-1].strip()
@@ -452,7 +459,7 @@ def run_pipeline(job_id: str, video_path: Path, opts: dict):
         duration_str = _human_duration(result.get("duration") or 0)
         md, warning = generate_minutes(
             result["text"], opts["title"], opts["date"], duration_str,
-            opts["ollama_model"], job_id,
+            opts["ollama_model"], job_id, opts.get("custom_prompt", ""),
         )
         (job_dir / "minuta.md").write_text(md, encoding="utf-8")
 
@@ -506,11 +513,18 @@ async def create_job(
     azure_endpoint: str = Form(""),
     azure_key: str = Form(""),
     azure_model: str = Form(""),
+    custom_prompt: str = Form(""),
 ):
     if model_size not in VALID_WHISPER_MODELS:
         raise HTTPException(400, f"Modello non valido: {model_size}")
     if language not in VALID_LANGUAGES:
         raise HTTPException(400, f"Lingua non valida: {language}")
+
+    # persisti il prompt personalizzato (config.json locale)
+    cfgp = load_config()
+    if cfgp.get("custom_prompt", "") != custom_prompt:
+        cfgp["custom_prompt"] = custom_prompt
+        save_config(cfgp)
 
     # persisti la configurazione Azure se fornita (config.json locale)
     if computation == "cloud":
@@ -544,6 +558,7 @@ async def create_job(
         "date": date.strip() or time.strftime("%d/%m/%Y"),
         "ollama_model": ollama_model.strip() or DEFAULT_OLLAMA_MODEL,
         "azure_model": azure_model,
+        "custom_prompt": custom_prompt,
     }
     with JOBS_LOCK:
         JOBS[job_id] = {
@@ -580,6 +595,7 @@ def get_config():
         "azure_endpoint": az.get("endpoint", ""),
         "azure_model": az.get("model", VALID_AZURE_MODELS[0]),
         "azure_has_key": bool(az.get("key")),
+        "custom_prompt": load_config().get("custom_prompt", ""),
     }
 
 

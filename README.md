@@ -1,4 +1,4 @@
-# Meeting minutes local
+# Minute Agent
 
 Local-first meeting minutes generator for IT consulting. Drop an OBS recording into a simple web UI and get back a full transcript plus structured, professional meeting minutes — by default without a single byte leaving your machine.
 
@@ -21,18 +21,17 @@ Each job produces `minuta.md`, `minuta.docx`, `trascrizione.txt` and `trascrizio
 ## Requirements
 
 - Python 3.10+
-- [Ollama](https://ollama.com) for minutes drafting (recommended): `ollama pull llama3.1:8b`
 
-Everything else (including ffmpeg) is installed automatically into a local virtual environment on first launch.
+Everything else is installed automatically: dependencies (including a static ffmpeg) go into a local virtual environment, and the launcher offers to install [Ollama](https://ollama.com) and pull the default LLM if missing.
 
 ## Quick start
 
 ```bash
-git clone https://github.com/angelusgi/minute-agent.git
+git clone https://github.com/<you>/minute-agent.git
 cd minute-agent
 ```
 
-- **Windows:** double-click `run.bat`
+- **Windows:** double-click `run.bat` (a thin wrapper that runs `run.ps1` with PowerShell)
 - **Linux/macOS:** `./run.sh`
 
 The first launch creates a venv and installs dependencies; the first transcription downloads the selected Whisper model once. The browser opens at `http://127.0.0.1:8756`.
@@ -61,7 +60,7 @@ Audio is uploaded as mono 16 kHz FLAC to stay within the API's 300 MB limit (~5 
 
 - `app.py` — FastAPI backend: job queue, ffmpeg extraction, pluggable `TranscriptionEngine` (faster-whisper / Azure Foundry), Ollama minutes generation, Markdown→docx export.
 - `static/index.html` — single-page UI, no build step.
-- `run.bat` / `run.sh` — self-healing launchers (venv validation and recreation, dependency check before install).
+- `run.ps1` (+ `run.bat` wrapper) / `run.sh` — self-healing launchers: venv validation and recreation, dependency check before install, optional Ollama install and model pull.
 
 Adding another STT provider means implementing one `TranscriptionEngine` subclass.
 

@@ -25,7 +25,7 @@
   .drop .file-name { color: var(--ok); font-weight: 600; }
   .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
   label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
-  select, input[type=text] { width: 100%; padding: 9px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+  select, input[type=text], textarea { width: 100%; padding: 9px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; resize: vertical; }
   .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
   button.primary { width: 100%; margin-top: 20px; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
   button.primary:disabled { opacity: .45; cursor: not-allowed; }
@@ -134,6 +134,12 @@
       </div>
     </div>
 
+    <div style="margin-top:18px;">
+      <label for="custom_prompt">Personalizzazione del prompt (opzionale)</label>
+      <textarea id="custom_prompt" rows="3" placeholder="Istruzioni aggiuntive per la minuta, es.: usa un tono formale; evidenzia i temi di sicurezza; il cliente si chiama Contoso"></textarea>
+      <div class="hint">Si aggiunge al prompt standard, che individua sempre gli interlocutori e attribuisce loro decisioni e azioni. Viene ricordata per i prossimi meeting.</div>
+    </div>
+
     <button class="primary" id="start" disabled>Genera la minuta</button>
   </div>
 
@@ -187,6 +193,7 @@ fetch('/api/config').then(r => r.json()).then(c => {
   $('azure_endpoint').value = c.azure_endpoint || '';
   $('azure_model').value = c.azure_model || 'mai-transcribe-1.5';
   if (c.azure_has_key) $('azure_key').placeholder = 'chiave salvata (lascia vuoto per riusarla)';
+  $('custom_prompt').value = c.custom_prompt || '';
 }).catch(() => {});
 
 // --- file selection ---
@@ -215,6 +222,7 @@ $('start').addEventListener('click', async () => {
   fd.append('title', $('title').value);
   fd.append('date', $('date').value);
   fd.append('ollama_model', $('ollama_model').value);
+  fd.append('custom_prompt', $('custom_prompt').value);
   if ($('computation').value === 'cloud') {
     fd.append('azure_endpoint', $('azure_endpoint').value);
     fd.append('azure_key', $('azure_key').value);
