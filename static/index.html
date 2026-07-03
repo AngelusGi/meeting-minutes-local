@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Minute Agent</title>
+<style>
+  :root {
+    --bg: #0f1420; --card: #1a2232; --border: #2b3650;
+    --text: #e8ecf4; --muted: #93a0b8; --accent: #4f8cff;
+    --ok: #3ecf8e; --warn: #f5b942; --err: #ff6b6b;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'Segoe UI', system-ui, sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; padding: 32px 16px; }
+  .wrap { max-width: 760px; margin: 0 auto; }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  .sub { color: var(--muted); margin-bottom: 20px; font-size: 14px; }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 22px; margin-bottom: 16px; }
+  .status-row { display: flex; gap: 14px; font-size: 13px; color: var(--muted); flex-wrap: wrap; }
+  .dot { display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; background: var(--muted); }
+  .dot.ok { background: var(--ok); } .dot.err { background: var(--err); }
+  .drop { border: 2px dashed var(--border); border-radius: 12px; padding: 34px; text-align: center; cursor: pointer; transition: border-color .2s; }
+  .drop:hover, .drop.over { border-color: var(--accent); }
+  .drop p { color: var(--muted); font-size: 14px; margin-top: 6px; }
+  .drop .file-name { color: var(--ok); font-weight: 600; }
+  .grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; margin-top: 18px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 5px; }
+  select, input[type=text] { width: 100%; padding: 9px 10px; background: var(--bg); color: var(--text); border: 1px solid var(--border); border-radius: 8px; font-size: 14px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 4px; }
+  button.primary { width: 100%; margin-top: 20px; padding: 13px; background: var(--accent); color: #fff; border: none; border-radius: 10px; font-size: 16px; font-weight: 600; cursor: pointer; }
+  button.primary:disabled { opacity: .45; cursor: not-allowed; }
+  .steps { list-style: none; margin: 14px 0; }
+  .steps li { padding: 7px 0; color: var(--muted); font-size: 14px; }
+  .steps li.active { color: var(--text); font-weight: 600; }
+  .steps li.done { color: var(--ok); }
+  .bar { height: 8px; background: var(--bg); border-radius: 4px; overflow: hidden; margin: 10px 0 16px; }
+  .bar > div { height: 100%; background: var(--accent); width: 0; transition: width .5s; }
+  .log { background: var(--bg); border-radius: 8px; padding: 12px; font-family: Consolas, monospace; font-size: 12px; color: var(--muted); max-height: 160px; overflow-y: auto; white-space: pre-wrap; }
+  .downloads { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 14px; }
+  .downloads a { padding: 10px 16px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--accent); text-decoration: none; font-size: 14px; font-weight: 600; }
+  .downloads a:hover { border-color: var(--accent); }
+  .banner { padding: 12px 14px; border-radius: 8px; font-size: 13px; margin-top: 14px; }
+  .banner.warn { background: rgba(245,185,66,.12); color: var(--warn); }
+  .banner.err { background: rgba(255,107,107,.12); color: var(--err); }
+  .hidden { display: none; }
+  #reset { margin-top: 16px; background: none; border: 1px solid var(--border); color: var(--muted); padding: 9px 16px; border-radius: 8px; cursor: pointer; }
+  table.models { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+  table.models th { text-align: left; color: var(--muted); font-weight: 600; padding: 6px 8px; border-bottom: 1px solid var(--border); }
+  table.models td { padding: 6px 8px; border-bottom: 1px solid var(--border); color: var(--text); }
+  table.models tr:last-child td { border-bottom: none; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Minute Agent</h1>
+  <div class="sub">Da registrazione OBS a minuta di meeting &mdash; tutto in locale, nessun dato lascia il tuo PC.</div>
+
+  <div class="card">
+    <div class="status-row" id="health">
+      <span><span class="dot" id="d-ffmpeg"></span>ffmpeg</span>
+      <span><span class="dot" id="d-gpu"></span>GPU</span>
+      <span><span class="dot" id="d-ollama"></span>Ollama</span>
+    </div>
+  </div>
+
+  <div class="card" id="form-card">
+    <div class="drop" id="drop">
+      <div id="drop-label"><strong>Trascina qui il video</strong> oppure clicca per sceglierlo</div>
+      <p>Formati: .mkv, .mp4, .mov, .flv (registrazioni OBS)</p>
+      <input type="file" id="file" accept="video/*,.mkv,.flv" class="hidden">
+    </div>
+
+    <div class="grid">
+      <div>
+        <label for="title">Titolo del meeting</label>
+        <input type="text" id="title" placeholder="Es. Steering governance Azure">
+      </div>
+      <div>
+        <label for="date">Data</label>
+        <input type="text" id="date" placeholder="gg/mm/aaaa (vuoto = oggi)">
+      </div>
+      <div>
+        <label for="computation">Computazione</label>
+        <select id="computation">
+          <option value="local" selected>Locale (default)</option>
+          <option value="cloud">Cloud &mdash; Azure AI Foundry (MAI-Transcribe)</option>
+        </select>
+      </div>
+      <div>
+        <label for="model">Modello di trascrizione</label>
+        <select id="model">
+          <option value="tiny">tiny</option>
+          <option value="base">base</option>
+          <option value="small" selected>small</option>
+          <option value="medium">medium</option>
+          <option value="large-v3">large-v3</option>
+          <option value="large-v3-turbo">large-v3-turbo</option>
+        </select>
+      </div>
+      <div>
+        <label for="language">Lingua audio</label>
+        <select id="language">
+          <option value="auto" selected>Rilevamento automatico</option>
+          <option value="it">Italiano</option>
+          <option value="en">Inglese</option>
+        </select>
+      </div>
+      <div>
+        <label for="ollama_model">Modello LLM per la minuta (Ollama)</label>
+        <input type="text" id="ollama_model" value="llama3.1:8b">
+        <div class="hint">Serve <a href="https://ollama.com" target="_blank" style="color:var(--accent)">Ollama</a> attivo. Senza, ottieni trascrizione + template.</div>
+      </div>
+    </div>
+
+    <div id="azure-panel" class="hidden" style="margin-top:18px; padding:14px; border:1px solid var(--border); border-radius:10px;">
+      <div style="font-size:13px; color:var(--muted); margin-bottom:10px;">
+        Azure AI Foundry &mdash; l'audio viene inviato alla tua risorsa Azure (~$0.36/h, API in preview).
+        Endpoint e chiave vengono salvati in <code>config.json</code> accanto all'app.
+      </div>
+      <div class="grid" style="margin-top:0;">
+        <div>
+          <label for="azure_endpoint">Endpoint o nome risorsa</label>
+          <input type="text" id="azure_endpoint" placeholder="nome-risorsa oppure https://...cognitiveservices.azure.com">
+        </div>
+        <div>
+          <label for="azure_key">Chiave</label>
+          <input type="text" id="azure_key" placeholder="chiave della risorsa Speech/Foundry">
+        </div>
+        <div>
+          <label for="azure_model">Modello</label>
+          <input type="text" id="azure_model" value="mai-transcribe-1.5" placeholder="mai-transcribe-1.5">
+          <div class="hint">Qualsiasi modello della LLM Speech API, es. mai-transcribe-1.5, mai-transcribe-1</div>
+        </div>
+      </div>
+    </div>
+
+    <button class="primary" id="start" disabled>Genera la minuta</button>
+  </div>
+
+  <div class="card hidden" id="progress-card">
+    <ul class="steps">
+      <li data-step="audio">1. Estrazione audio (ffmpeg)</li>
+      <li data-step="transcribe">2. Trascrizione</li>
+      <li data-step="minutes">3. Generazione minuta (LLM locale)</li>
+      <li data-step="export">4. Export .md + .docx</li>
+    </ul>
+    <div class="bar"><div id="bar-fill"></div></div>
+    <div class="log" id="log"></div>
+    <div id="result"></div>
+    <button id="reset" class="hidden">Nuova minuta</button>
+  </div>
+
+  <div class="card">
+    <div style="font-size:13px; color:var(--muted); margin-bottom:8px;"><strong>Guida ai modelli di trascrizione</strong></div>
+    <table class="models">
+      <tr><th>Modello</th><th>Dove gira</th><th>Qualit&agrave;</th><th>Velocit&agrave;</th><th>Note</th></tr>
+      <tr><td>tiny</td><td>locale</td><td>bassa</td><td>velocissimo</td><td>solo per prove</td></tr>
+      <tr><td>base</td><td>locale</td><td>discreta</td><td>molto veloce</td><td></td></tr>
+      <tr><td>small</td><td>locale</td><td>buona</td><td>&asymp;1x durata audio su CPU</td><td>default, ok per meeting chiari</td></tr>
+      <tr><td>medium</td><td>locale</td><td>ottima</td><td>lento su CPU</td><td></td></tr>
+      <tr><td>large-v3</td><td>locale</td><td>massima</td><td>richiede GPU NVIDIA</td><td>il migliore su audio misto IT/EN</td></tr>
+      <tr><td>large-v3-turbo</td><td>locale</td><td>alta</td><td>veloce con GPU</td><td>buon compromesso</td></tr>
+      <tr><td>mai-transcribe-1.5</td><td>cloud Azure</td><td>massima</td><td>molto veloce</td><td>~$0.36/h &middot; max 300 MB &middot; no diarizzazione</td></tr>
+      <tr><td>mai-transcribe-1</td><td>cloud Azure</td><td>alta</td><td>molto veloce</td><td>versione precedente</td></tr>
+    </table>
+  </div>
+</div>
+
+<script>
+const $ = id => document.getElementById(id);
+let selectedFile = null;
+
+// --- health check ---
+fetch('/api/health').then(r => r.json()).then(h => {
+  $('d-ffmpeg').className = 'dot ' + (h.ffmpeg ? 'ok' : 'err');
+  $('d-gpu').className = 'dot ' + (h.gpu ? 'ok' : '');
+  $('d-ollama').className = 'dot ' + (h.ollama ? 'ok' : 'err');
+}).catch(() => {});
+
+// --- pannello Azure: mostra/nascondi e precompila da config.json ---
+$('computation').addEventListener('change', () => {
+  const cloud = $('computation').value === 'cloud';
+  $('azure-panel').classList.toggle('hidden', !cloud);
+  $('model').disabled = cloud; // il modello Whisper non si applica al cloud
+});
+fetch('/api/config').then(r => r.json()).then(c => {
+  $('azure_endpoint').value = c.azure_endpoint || '';
+  $('azure_model').value = c.azure_model || 'mai-transcribe-1.5';
+  if (c.azure_has_key) $('azure_key').placeholder = 'chiave salvata (lascia vuoto per riusarla)';
+}).catch(() => {});
+
+// --- file selection ---
+const drop = $('drop');
+drop.addEventListener('click', () => $('file').click());
+$('file').addEventListener('change', e => setFile(e.target.files[0]));
+['dragover', 'dragleave', 'drop'].forEach(ev =>
+  drop.addEventListener(ev, e => { e.preventDefault(); drop.classList.toggle('over', ev === 'dragover'); })
+);
+drop.addEventListener('drop', e => setFile(e.dataTransfer.files[0]));
+
+function setFile(f) {
+  if (!f) return;
+  selectedFile = f;
+  $('drop-label').innerHTML = '<span class="file-name">' + f.name + '</span> (' + (f.size / 1048576).toFixed(0) + ' MB)';
+  $('start').disabled = false;
+}
+
+// --- submit ---
+$('start').addEventListener('click', async () => {
+  const fd = new FormData();
+  fd.append('file', selectedFile);
+  fd.append('model_size', $('model').value);
+  fd.append('language', $('language').value);
+  fd.append('computation', $('computation').value);
+  fd.append('title', $('title').value);
+  fd.append('date', $('date').value);
+  fd.append('ollama_model', $('ollama_model').value);
+  if ($('computation').value === 'cloud') {
+    fd.append('azure_endpoint', $('azure_endpoint').value);
+    fd.append('azure_key', $('azure_key').value);
+    fd.append('azure_model', $('azure_model').value);
+  }
+
+  $('form-card').classList.add('hidden');
+  $('progress-card').classList.remove('hidden');
+  $('log').textContent = 'Caricamento del file in corso...';
+
+  try {
+    const resp = await fetch('/api/jobs', { method: 'POST', body: fd });
+    if (!resp.ok) throw new Error((await resp.json()).detail || resp.statusText);
+    const { job_id } = await resp.json();
+    poll(job_id);
+  } catch (e) {
+    showError('Errore di avvio: ' + e.message);
+  }
+});
+
+// --- polling ---
+const STEPS = ['audio', 'transcribe', 'minutes', 'export'];
+function poll(jobId) {
+  const timer = setInterval(async () => {
+    let job;
+    try { job = await (await fetch('/api/jobs/' + jobId)).json(); }
+    catch { return; }
+
+    document.querySelectorAll('.steps li').forEach(li => {
+      const s = li.dataset.step;
+      const idx = STEPS.indexOf(s), cur = STEPS.indexOf(job.step);
+      li.className = (job.step === 'done' || idx < cur) ? 'done' : (s === job.step ? 'active' : '');
+    });
+    if (job.step === 'transcribe') $('bar-fill').style.width = (job.step_progress || 0) + '%';
+    else if (job.step === 'done') $('bar-fill').style.width = '100%';
+    $('log').textContent = (job.log || []).join('\n');
+    $('log').scrollTop = $('log').scrollHeight;
+
+    if (job.status === 'done') {
+      clearInterval(timer);
+      let html = '<div class="downloads">';
+      for (const f of job.outputs) html += '<a href="/api/jobs/' + jobId + '/download/' + f + '">' + f + '</a>';
+      html += '</div>';
+      if (job.warning) html += '<div class="banner warn">' + job.warning + '</div>';
+      $('result').innerHTML = html;
+      $('reset').classList.remove('hidden');
+    } else if (job.status === 'error') {
+      clearInterval(timer);
+      showError(job.error);
+    }
+  }, 1500);
+}
+
+function showError(msg) {
+  $('result').innerHTML = '<div class="banner err">' + msg + '</div>';
+  $('reset').classList.remove('hidden');
+}
+
+$('reset').addEventListener('click', () => location.reload());
+</script>
+</body>
+</html>
