@@ -1,4 +1,4 @@
-# Minute Agent
+# Meeting minutes local
 
 Local-first meeting minutes generator for IT consulting. Drop an OBS recording into a simple web UI and get back a full transcript plus structured, professional meeting minutes — by default without a single byte leaving your machine.
 
